@@ -62,7 +62,12 @@ class AppSettings(BaseSettings):
     @property
     def has_openai_key(self) -> bool:
         """Check whether a valid OpenAI API key is configured."""
-        return bool(self.OPENAI_API_KEY) and self.OPENAI_API_KEY != "YOUR_OPENAI_API_KEY"
+        key = (self.OPENAI_API_KEY or "").strip()
+        if not key or key == "YOUR_OPENAI_API_KEY":
+            return False
+        if self.OPENAI_API_BASE:
+            return True
+        return key.startswith(("sk-", "sess-"))
 
 
 # Singleton instance used across the application

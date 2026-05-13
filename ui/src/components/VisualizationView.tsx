@@ -8,8 +8,6 @@ import {
   Cell,
   ScatterChart,
   Scatter,
-  AreaChart,
-  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -17,37 +15,37 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts'
-import { extractChartData, formatDataForChart, selectChartType } from '../utils/chartSelector'
+import { buildVisualizationPlan, formatChartData } from '../utils/chartSelector'
 
 type VisualizationViewProps = {
   columns: string[]
   rows: Record<string, unknown>[]
+  loading?: boolean
 }
 
-const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
+const COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#06b6d4', '#f97316']
 
-function VisualizationView({ columns, rows }: VisualizationViewProps) {
-  if (!rows || rows.length === 0) {
+function VisualizationView({ columns, rows, loading = false }: VisualizationViewProps) {
+  if (loading) {
     return (
       <div className="visualization-empty">
-        <div className="empty-icon">📊</div>
-        <p>No data to visualize</p>
-        <span>Execute a query to see visualizations</span>
+        <div className="empty-icon">...</div>
+        <p>Building Visualization...</p>
+        <span>Analyzing the result set and preparing the best chart.</span>
       </div>
     )
   }
 
-  const { numericCols, categoricalCols } = extractChartData(columns, rows)
-  const chartType = selectChartType(columns, rows)
+  const plan = buildVisualizationPlan(columns, rows)
+  const chartData = formatChartData(rows, plan)
 
-  // Get primary numeric and categorical columns
-  const xAxis = categoricalCols[0] || numericCols[0] || columns[0]
-  const yAxis = numericCols[0] || columns[1] || columns[0]
-
-  const chartData = formatDataForChart(rows, xAxis, yAxis)
+  const tooltipStyle = {
+    backgroundColor: 'var(--bg-secondary)',
+    border: '1px solid var(--border-subtle)',
+  }
 
   const renderChart = () => {
-    switch (chartType) {
+    switch (plan.chartType) {
       case 'bar':
         return (
           <ResponsiveContainer width="100%" height={400}>
@@ -55,14 +53,9 @@ function VisualizationView({ columns, rows }: VisualizationViewProps) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-subtle)',
-                }}
-              />
+              <Tooltip contentStyle={tooltipStyle} />
               <Legend />
-              <Bar dataKey="value" fill="#3b82f6" name={yAxis} />
+              <Bar dataKey="value" fill="#3b82f6" name={plan.yAxis} />
             </BarChart>
           </ResponsiveContainer>
         )
@@ -74,55 +67,15 @@ function VisualizationView({ columns, rows }: VisualizationViewProps) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
               <XAxis dataKey="name" />
               <YAxis />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-subtle)',
-                }}
-              />
+              <Tooltip contentStyle={tooltipStyle} />
               <Legend />
-              <Line type="monotone" dataKey="value" stroke="#3b82f6" name={yAxis} />
+              <Line type="monotone" dataKey="value" stroke="#10b981" name={plan.yAxis} />
             </LineChart>
           </ResponsiveContainer>
         )
 
-      case 'area':
-        return (
-          <ResponsiveContainer width="100%" height={400}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-subtle)',
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke="#3b82f6"
-                fillOpacity={1}
-                fill="url(#colorValue)"
-                name={yAxis}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        )
-
       case 'pie': {
-        const pieData = chartData.slice(0, 5).map((item, idx) => ({
-          name: String(item.name),
-          value: parseFloat(String(item.value)) || 0,
-        }))
-
+        const pieData = chartData.slice(0, 8)
         return (
           <ResponsiveContainer width="100%" height={400}>
             <PieChart>
@@ -130,22 +83,17 @@ function VisualizationView({ columns, rows }: VisualizationViewProps) {
                 data={pieData}
                 cx="50%"
                 cy="50%"
+                outerRadius={130}
                 labelLine={false}
-                label={(entry) => `${entry.name}: ${entry.value}`}
-                outerRadius={120}
-                fill="#3b82f6"
                 dataKey="value"
+                nameKey="name"
+                label={({ name, value }) => `${name}: ${value}`}
               >
                 {pieData.map((_, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                 ))}
               </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-subtle)',
-                }}
-              />
+              <Tooltip contentStyle={tooltipStyle} />
             </PieChart>
           </ResponsiveContainer>
         )
@@ -154,20 +102,13 @@ function VisualizationView({ columns, rows }: VisualizationViewProps) {
       case 'scatter':
         return (
           <ResponsiveContainer width="100%" height={400}>
-            <ScatterChart
-              margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-              data={chartData}
-            >
+            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border-subtle)" />
-              <XAxis type="number" dataKey="value" name={xAxis} />
-              <YAxis type="number" dataKey="value" name={yAxis} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-subtle)',
-                }}
-              />
-              <Scatter name={yAxis} data={chartData} fill="#3b82f6" />
+              <XAxis type="number" dataKey="x" name={plan.xAxis} />
+              <YAxis type="number" dataKey="y" name={plan.yAxis} />
+              <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={tooltipStyle} />
+              <Legend />
+              <Scatter name={`${plan.xAxis} vs ${plan.yAxis}`} data={chartData} fill="#3b82f6" />
             </ScatterChart>
           </ResponsiveContainer>
         )
@@ -175,9 +116,9 @@ function VisualizationView({ columns, rows }: VisualizationViewProps) {
       default:
         return (
           <div className="visualization-empty">
-            <div className="empty-icon">📊</div>
-            <p>Chart type not suitable for this data</p>
-            <span>Use Table View to see detailed results</span>
+            <div className="empty-icon">Chart</div>
+            <p>Visualization unavailable</p>
+            <span>{plan.reason}</span>
           </div>
         )
     }
@@ -187,11 +128,9 @@ function VisualizationView({ columns, rows }: VisualizationViewProps) {
     <div className="visualization-container">
       <div className="visualization-info">
         <span className="info-badge">
-          {chartType === 'table' ? '📋' : '📊'} {chartType.toUpperCase()}
+          {plan.chartType === 'table' ? 'Table Fallback' : `${plan.chartType.toUpperCase()} Chart`}
         </span>
-        <span className="info-text">
-          {rows.length} rows • {columns.length} columns
-        </span>
+        <span className="info-text">{plan.reason}</span>
       </div>
       <div className="visualization-content">{renderChart()}</div>
     </div>

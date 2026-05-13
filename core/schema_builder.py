@@ -17,6 +17,7 @@ from sqlalchemy import (
 )
 
 from database.db_manager import engine
+from core.sql_validation import quote_identifier
 from utils.helpers import sanitize_name
 from utils.logger import get_logger
 
@@ -161,11 +162,8 @@ def get_tables_metadata() -> list[dict[str, Any]]:
             ]
 
             # Row count
-            row_count_result = conn.execute(
-                table.select().with_only_columns()  # empty select for count
-            )
             from sqlalchemy import text
-            count = conn.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+            count = conn.execute(text(f"SELECT COUNT(*) FROM {quote_identifier(table_name)}")).scalar()
 
             # Sample rows (first 3)
             sample_result = conn.execute(table.select().limit(3))

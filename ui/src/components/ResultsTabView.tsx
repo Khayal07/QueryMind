@@ -1,22 +1,31 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ResultsTable from './ResultsTable'
 import VisualizationView from './VisualizationView'
+
+type RequestPhase = 'idle' | 'generating' | 'generated' | 'executing' | 'ready'
+type TabType = 'table' | 'visualization'
 
 type ResultsTabViewProps = {
   columns: string[]
   rows: Record<string, unknown>[]
   rowCount?: number
-  visualizing?: boolean
+  phase: RequestPhase
 }
 
-type TabType = 'table' | 'visualization'
-
-function ResultsTabView({ columns, rows, rowCount, visualizing = false }: ResultsTabViewProps) {
+function ResultsTabView({ columns, rows, rowCount, phase }: ResultsTabViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>('table')
+  const [visualizing, setVisualizing] = useState(false)
 
-  if (!rows || rows.length === 0) {
-    return null
-  }
+  useEffect(() => {
+    if (activeTab !== 'visualization' || phase !== 'ready' || rows.length === 0) {
+      setVisualizing(false)
+      return
+    }
+
+    setVisualizing(true)
+    const timer = window.setTimeout(() => setVisualizing(false), 180)
+    return () => window.clearTimeout(timer)
+  }, [activeTab, phase, rows.length, columns.length])
 
   return (
     <div className="results-tab-view">
@@ -26,15 +35,15 @@ function ResultsTabView({ columns, rows, rowCount, visualizing = false }: Result
             className={`tab-btn ${activeTab === 'table' ? 'active' : ''}`}
             onClick={() => setActiveTab('table')}
           >
-            <span className="tab-icon">📋</span>
+            <span className="tab-icon">Table</span>
             Table View
           </button>
           <button
             className={`tab-btn ${activeTab === 'visualization' ? 'active' : ''}`}
             onClick={() => setActiveTab('visualization')}
           >
-            <span className="tab-icon">📊</span>
-            Visualization
+            <span className="tab-icon">Chart</span>
+            Visualization View
             {visualizing && <span className="tab-loading">...</span>}
           </button>
         </div>
@@ -47,9 +56,9 @@ function ResultsTabView({ columns, rows, rowCount, visualizing = false }: Result
 
       <div className="tab-content">
         {activeTab === 'table' ? (
-          <ResultsTable columns={columns} rows={rows} rowCount={rowCount} />
+          <ResultsTable columns={columns} rows={rows} rowCount={rowCount} phase={phase} />
         ) : (
-          <VisualizationView columns={columns} rows={rows} />
+          <VisualizationView columns={columns} rows={rows} loading={visualizing || phase === 'executing'} />
         )}
       </div>
     </div>

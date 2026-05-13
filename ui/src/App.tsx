@@ -10,6 +10,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8000/api'
 
 type SchemaType = Record<string, Record<string, string>>
 type QueryResult = { columns: string[]; rows: Record<string, unknown>[]; row_count?: number }
+type RequestPhase = 'idle' | 'generating' | 'generated' | 'executing' | 'ready'
 
 let nextToastId = 1
 let nextHistoryId = 1
@@ -26,6 +27,7 @@ function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([])
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [historyOpen, setHistoryOpen] = useState(true)
+  const [phase, setPhase] = useState<RequestPhase>('idle')
 
   const addToast = useCallback((type: ToastMessage['type'], text: string) => {
     setToasts((prev) => [...prev, { id: nextToastId++, type, text }])
@@ -47,6 +49,7 @@ function App() {
   const handleGenerate = async () => {
     if (!prompt.trim()) return
     setLoading(true)
+    setPhase('generating')
     setError('')
     setResult(null)
     try {
@@ -65,9 +68,11 @@ function App() {
         },
         ...prev,
       ])
+      setPhase('generated')
       addToast('success', 'SQL generated successfully')
     } catch {
       setError('Failed to generate SQL. Check backend logs.')
+      setPhase('idle')
       addToast('error', 'SQL generation failed')
     } finally {
       setLoading(false)
@@ -78,13 +83,16 @@ function App() {
   const handleExecute = async () => {
     if (!sql) return
     setExecuting(true)
+    setPhase('executing')
     setError('')
     try {
       const res = await axios.post(`${API_BASE}/execute`, { sql })
       setResult(res.data)
+      setPhase('ready')
       addToast('success', `Query returned ${res.data.row_count ?? res.data.rows?.length ?? 0} rows`)
     } catch {
       setError('Query execution failed. Check SQL syntax.')
+      setPhase('generated')
       addToast('error', 'Query execution failed')
     } finally {
       setExecuting(false)
@@ -105,6 +113,7 @@ function App() {
     setAiMode(entry.aiMode)
     setResult(null)
     setError('')
+    setPhase('generated')
   }
 
   return (
@@ -182,7 +191,7 @@ function App() {
               <div className="panel-title">
                 <div className="panel-icon sql">⚡</div>
                 <div>
-                  <h2>Generated SQL</h2>
+                  <h2>Generated SQL Query</h2>
                   <p className="panel-subtitle">AI-generated query for your analytics workflow</p>
                 </div>
               </div>
@@ -193,7 +202,9 @@ function App() {
                 aiMode={aiMode}
                 onCopy={copyToClipboard}
                 onExecute={handleExecute}
-                loading={executing}
+                generating={loading}
+                executing={executing}
+                phase={phase}
                 result={result}
               />
             </div>
